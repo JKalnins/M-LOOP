@@ -65,3 +65,6 @@ target/
 #Project specific files
 ExpConfig.txt
 .DS_Store
+
+# local files
+.vscode
