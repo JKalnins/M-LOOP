@@ -1824,7 +1824,10 @@ class GaussianProcessLearner(Learner, mp.Process):
                 "a",
             ) as my_log:
                 my_log.write("Predicted best params: " + str(next_params) + "\n")
-                my_log.write("Predicted cost: " + str(next_cost) + "\n")
+                # my_log.write("Predicted cost: " + str(next_cost) + "\n")
+                # this isn't needed since we don't actually need the computer's best guess
+                # at cost, only at the parameters which will minimise it
+                # we can calculate the cost ourselves
         return next_params
 
     def run(self):
