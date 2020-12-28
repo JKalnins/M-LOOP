@@ -68,3 +68,4 @@ ExpConfig.txt
 
 # local files
 .vscode
+logs/

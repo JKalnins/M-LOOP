@@ -75,7 +75,7 @@ class Learner:
         learner_archive_file_type=default_learner_archive_file_type,
         start_datetime=None,
         param_names=None,
-        **kwargs
+        **kwargs,
     ):
 
         super(Learner, self).__init__()
@@ -449,7 +449,7 @@ class NelderMeadLearner(Learner, threading.Thread):
         initial_simplex_corner=None,
         initial_simplex_displacements=None,
         initial_simplex_scale=None,
-        **kwargs
+        **kwargs,
     ):
 
         super(NelderMeadLearner, self).__init__(**kwargs)
@@ -774,7 +774,7 @@ class DifferentialEvolutionLearner(Learner, threading.Thread):
         mutation_scale=(0.5, 1),
         cross_over_probability=0.7,
         restart_tolerance=0.01,
-        **kwargs
+        **kwargs,
     ):
 
         super(DifferentialEvolutionLearner, self).__init__(**kwargs)
@@ -1153,7 +1153,7 @@ class GaussianProcessLearner(Learner, mp.Process):
         gp_training_filename=None,
         gp_training_file_type=None,
         predict_global_minima_at_end=True,
-        **kwargs
+        **kwargs,
     ):
 
         if gp_training_filename is not None:
@@ -1246,7 +1246,7 @@ class GaussianProcessLearner(Learner, mp.Process):
                 min_boundary=min_boundary,
                 max_boundary=max_boundary,
                 param_names=param_names,
-                **kwargs
+                **kwargs,
             )
 
         else:
@@ -1819,8 +1819,11 @@ class GaussianProcessLearner(Learner, mp.Process):
                 next_params = result.x
                 next_cost = result.fun
         if self.uncer_bias == 0:
+            logfilename = mlu.datetime_to_string(self.start_datetime)
+            if not os.path.isdir("./logs"):
+                os.mkdir("./logs")
             with open(
-                "C:\\Users\\kalni\\Documents\\year4\\Masters Project\\Code\\M-LOOP-testing\\logtest.txt",
+                f"logs/log_bestparams_{logfilename}.txt",
                 "a",
             ) as my_log:
                 my_log.write("Predicted best params: " + str(next_params) + "\n")
@@ -1991,7 +1994,7 @@ class NeuralNetLearner(Learner, mp.Process):
         nn_training_file_type=None,
         minimum_uncertainty=1e-8,
         predict_global_minima_at_end=True,
-        **kwargs
+        **kwargs,
     ):
 
         if nn_training_filename is not None:
@@ -2067,7 +2070,7 @@ class NeuralNetLearner(Learner, mp.Process):
                 min_boundary=min_boundary,
                 max_boundary=max_boundary,
                 param_names=param_names,
-                **kwargs
+                **kwargs,
             )
         else:
             self.nn_training_file_dir = None
