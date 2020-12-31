@@ -1820,13 +1820,17 @@ class GaussianProcessLearner(Learner, mp.Process):
                 next_cost = result.fun
         if self.uncer_bias == 0:
             logfilename = mlu.datetime_to_string(self.start_datetime)
+            param_txt = np.array2string(next_params, max_line_width=np.inf)
             if not os.path.isdir("./logs"):
                 os.mkdir("./logs")
             with open(
                 f"logs/log_bestparams_{logfilename}.txt",
                 "a",
             ) as my_log:
-                my_log.write("Predicted best params: " + str(next_params) + "\n")
+                my_log.write(
+                    f"Predicted best params, run {self.params_count}: {param_txt}"
+                    + "\n"
+                )
                 # my_log.write("Predicted cost: " + str(next_cost) + "\n")
                 # this isn't needed since we don't actually need the computer's best guess
                 # at cost, only at the parameters which will minimise it
