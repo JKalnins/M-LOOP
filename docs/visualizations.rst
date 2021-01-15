@@ -83,6 +83,7 @@ Gaussian Process
   The noise level is useful for quantifying the intrinsic noise and uncertainty in your cost value.
   Most other optimization algorithms will not provide this estimate.
   The noise level estimate may be helpful when isolating what part of your system can be optimized and what part is due to random fluctuations.
+  This plot will only be generated if the ``cost_has_noise`` option was set to ``True``.
 
 Neural Net
 ----------
@@ -101,14 +102,24 @@ Neural Net
   This plot is also only generated if the optimization had two parameters.
   It shows the same data as the cost surface plot, except that the predicted cost is plotted using a color scale rather than using a third dimension.
 
-- **Neural Net Learner: Loss vs Training Run.**
-  Each time the neural nets are fitted there is a resulting loss, which is a measure of how well the predicted cost fits the measured values.
+- **Neural Net Learner: Loss vs Epoch.**
+  While fitting the neural nets their loss is calculated, which is a measure of how well the predicted cost fits the measured values.
   In M-LOOP this is measured as the mean of the square of the deviation between the predicted and measured values, plus a contribution from the regularization loss which is used to reduce overfitting.
   Each neural net records its loss every ten training epochs.
   This plot displays those recorded losses.
-  Note that a "training run" here is not the same as a run of the experiment.
-  Instead it is a measure of how many times the neural net fitting routine iterated over the data.
-  
+  Note that an "epoch" here is not the same as a run of the experiment.
+  One epoch corresponds to one iteration over the full data set while fitting a neural net.
+  Generally the fitting routine will go through many epochs during one fit, and the number of epochs per fit will vary.
+
+- **Neural Net Learner: Regularization History.**
+  The neural nets use L2 regularization to smooth their predicted landscapes in an attempt to avoid overfitting the data.
+  The strength of the regularization is set by the regularization coefficient, which is a hyperparameter that is tuned during the optimization if ``update_hyperparameters`` is set to ``True``.
+  Generally larger regularization coefficient values force the landscape to be smoother while smaller values allow it to vary more quickly.
+  A value too large can lead to underfitting while a value too small can lead to overfitting.
+  The ideal regularization coefficient value will depend on many factors, such as the shape of the actual cost landscape, the SNR of the measured costs, and even the number of measured costs.
+  This method plots the initial regularization coefficient value and the optimal values found for the regularization coefficient when performing the hyperparameter tuning.
+  One curve showing the history of values used for the regularization coefficient is plotted for each neural net.
+  If ``update_hyperparameters`` was set to ``False`` during the optimization, then only the initial default value will be plotted.
 
 Differential Evolution
 ----------------------
@@ -121,11 +132,11 @@ Differential Evolution
   This plot displays the measured costs for each generation.
   Because there are multiple runs per generation, there are many different values for the cost plotted for each generation.
 
-Nelder Mead
+Nelder–Mead
 -----------
 
-As of yet there is no visualization class implemented for the Nelder Mead learner.
-The controller's archive may still be plotted though when Nelder Mead is used.
+As of yet there is no visualization class implemented for the Nelder–Mead learner.
+The controller's archive may still be plotted though when Nelder–Mead is used.
 
 Random
 ------
