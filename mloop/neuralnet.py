@@ -4,19 +4,13 @@ import math
 import os
 import time
 import base64
-from distutils.version import LooseVersion
 
 import mloop.utilities as mlu
 import numpy as np
 import numpy.random as nr
 import sklearn.preprocessing as skp
-# Import tensorflow with backwards compatability if version is 2.0.0 or newer.
-from tensorflow import __version__ as tf_version
-if LooseVersion(tf_version) < LooseVersion('2.0.0'):
-    import tensorflow as tf
-else:
-    import tensorflow.compat.v1 as tf
-    tf.disable_v2_behavior()
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
 
 class SingleNeuralNet():
     '''
@@ -36,7 +30,7 @@ class SingleNeuralNet():
             will train for longer). Alternatively, you can think of this as the smallest gradient
             we'll allow before deciding that the loss isn't improving any more.
         batch_size: The training batch size.
-        keep_prob: The dropoout keep probability.
+        keep_prob: The dropout keep probability.
         regularisation_coefficient: The regularisation coefficient.
         losses_list: A list to which this object will append training losses.
         learner_archive_dir (Optional str): The path to a directory in which to
@@ -75,7 +69,7 @@ class SingleNeuralNet():
 
         self.log.info("Constructing net")
         self.graph = tf.Graph()
-        self.tf_session = tf.Session(graph=self.graph)
+        self.tf_session = tf.compat.v1.Session(graph=self.graph)
 
         if not len(layer_dims) == len(layer_activations):
             self.log.error('len(layer_dims) != len(layer_activations)')
@@ -92,34 +86,40 @@ class SingleNeuralNet():
 
         with self.graph.as_default():
             ## Inputs
-            self.input_placeholder = tf.placeholder(tf.float32, shape=[None, self.num_params])
-            self.output_placeholder = tf.placeholder(tf.float32, shape=[None, 1])
-            self.keep_prob_placeholder = tf.placeholder_with_default(1., shape=[])
-            self.regularisation_coefficient_placeholder = tf.placeholder_with_default(0., shape=[])
+            self.input_placeholder = tf.compat.v1.placeholder(
+                tf.float32, shape=[None, self.num_params])
+            self.output_placeholder = tf.compat.v1.placeholder(
+                tf.float32, shape=[None, 1])
+            self.keep_prob_placeholder = tf.compat.v1.placeholder_with_default(
+                1., shape=[])
+            self.regularisation_coefficient_placeholder = tf.compat.v1.placeholder_with_default(
+                0., shape=[])
 
             ## Initialise the network
 
             weights = []
             biases = []
 
+            weight_initializer = tf.compat.v1.initializers.he_normal()
+            bias_initializer = tf.compat.v1.random_normal_initializer(stddev=0.5)
+
             # Input + internal nodes
             prev_layer_dim = self.num_params
-            bias_stddev=0.5
             for (i, dim) in enumerate(layer_dims):
                 weights.append(tf.Variable(
-                    tf.random_normal([prev_layer_dim, dim], stddev=1.4/np.sqrt(prev_layer_dim)),
+                    weight_initializer(shape=[prev_layer_dim, dim], dtype=tf.float32),
                     name="weight_"+str(i)))
                 biases.append(tf.Variable(
-                    tf.random_normal([dim], stddev=bias_stddev),
+                    bias_initializer(shape=[dim], dtype=tf.float32),
                     name="bias_"+str(i)))
                 prev_layer_dim = dim
 
             # Output node
             weights.append(tf.Variable(
-                tf.random_normal([prev_layer_dim, 1], stddev=1.4/np.sqrt(prev_layer_dim)),
+                weight_initializer(shape=[prev_layer_dim, 1], dtype=tf.float32),
                 name="weight_out"))
             biases.append(tf.Variable(
-                tf.random_normal([1], stddev=bias_stddev),
+                bias_initializer(shape=[1], dtype=tf.float32),
                 name="bias_out"))
 
             # Get the output var given an input var
@@ -128,7 +128,7 @@ class SingleNeuralNet():
                 for w, b, act in zip(weights[:-1], biases[:-1], layer_activations):
                     prev_h = tf.nn.dropout(
                           act(tf.matmul(prev_h, w) + b),
-                          keep_prob=self.keep_prob_placeholder)
+                          rate=1-self.keep_prob_placeholder)
                 return tf.matmul(prev_h, weights[-1]) + biases[-1]
 
             ## Define tensors for evaluating the output var and gradient on the full input
@@ -141,7 +141,7 @@ class SingleNeuralNet():
             def get_loss_raw(expected, actual):
                 return tf.reduce_mean(tf.reduce_sum(
                     tf.square(expected - actual),
-                    reduction_indices=[1]))
+                    axis=[1]))
 
             # Regularisation component of the loss.
             loss_reg = (self.regularisation_coefficient_placeholder
@@ -149,16 +149,17 @@ class SingleNeuralNet():
 
             ## Define tensors for evaluating the loss on the full input
             self.loss_raw = get_loss_raw(self.output_placeholder, self.output_var)
+            self.loss_reg = loss_reg
             self.loss_total = self.loss_raw + loss_reg
 
             ## Training
-            self.train_step = tf.train.AdamOptimizer().minimize(self.loss_total)
+            self.train_step = tf.compat.v1.train.AdamOptimizer().minimize(self.loss_total)
 
             # Initialiser for ... initialising
-            self.initialiser = tf.global_variables_initializer()
+            self.initialiser = tf.compat.v1.global_variables_initializer()
 
             # Saver for saving and restoring params
-            self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
+            self.saver = tf.compat.v1.train.Saver(write_version=tf.compat.v1.train.SaverDef.V2)
         self.log.debug("Finished constructing net in: " + str(time.time() - start))
 
     def destroy(self):
@@ -173,13 +174,13 @@ class SingleNeuralNet():
     def load(self, archive, extra_search_dirs=None):
         '''
         Imports the net from an archive dictionary. You must call exactly one of this and init() before calling any other methods.
-        
+
         Args:
-            archive (dict): An archive dictionary containg the data from a
+            archive (dict): An archive dictionary containing the data from a
                 neural net learner archive, typically created using
                 get_dict_from_file() from utilities.py.
             extra_search_dirs (Optional list of str): If the neural net archive
-                is not in at the location sepcified for it in the archive
+                is not in at the location specified for it in the archive
                 dictionary, then the directories in extra_search_dirs will be
                 checked for a file of the saved name. If found, that file will
                 be used. If set to None, no other directories will be checked.
@@ -188,7 +189,7 @@ class SingleNeuralNet():
         # Set default value of extra_search_dirs if necessary.
         if extra_search_dirs is None:
             extra_search_dirs = []
-        
+
         # Get the saved filename and construct a list of directories to in which
         # to look for it.
         self.log.info("Loading neural network")
@@ -196,7 +197,7 @@ class SingleNeuralNet():
         saved_dirname, filename = os.path.split(saver_path)
         saved_dirname = os.path.join('.', saved_dirname)
         search_dirs = [saved_dirname] + extra_search_dirs
-        
+
         # Check each directory for the file.
         for dirname in search_dirs:
             try:
@@ -205,7 +206,7 @@ class SingleNeuralNet():
                 return
             except ValueError:
                 pass
-        
+
         # If the method hasn't returned by now then it's run out of places to
         # look.
         message = "Could not find neural net archive {filename}.".format(filename=filename)
@@ -222,10 +223,10 @@ class SingleNeuralNet():
 
     def _loss(self, params, costs):
         '''
-        Returns the loss and unregularised loss for the given params and costs.
+        Returns the loss, unregularised loss, and regularization loss for the given params and costs.
         '''
         return self.tf_session.run(
-            [self.loss_total, self.loss_raw],
+            [self.loss_total, self.loss_raw, self.loss_reg],
             feed_dict={self.input_placeholder: params,
                        self.output_placeholder: [[c] for c in costs],
                        self.regularisation_coefficient_placeholder: self.regularisation_coefficient,
@@ -277,13 +278,16 @@ class SingleNeuralNet():
                                                    self.keep_prob_placeholder: self.keep_prob,
                                                    })
                 if i % 10 == 0:
-                    (l, ul) = self._loss(params, costs)
+                    (l, ul, lr) = self._loss(params, costs)
                     self.losses_list.append(l)
-                    self.log.info('Fit neural network with total training cost ' + str(l)
-                            + ', with unregularized cost ' + str(ul))
+                    self.log.info(
+                        ("Fit neural network with total training cost {l}, "
+                         "with unregularized cost {ul} and regularization cost "
+                         "{lr}").format(l=l, ul=ul, lr=lr)
+                    )
             self.log.debug("Run trained for: " + str(time.time() - run_start))
 
-            (l, ul) = self._loss(params, costs)
+            (l, ul, lr) = self._loss(params, costs)
             al = tot / float(epochs)
             self.log.debug('Loss ' + str(l) + ', average loss ' + str(al))
             if l > threshold:
@@ -298,7 +302,7 @@ class SingleNeuralNet():
             params (array): array of parameter arrays
             costs (array): array of costs (associated with the corresponding parameters)
         '''
-        return self.tf_session.run(self.loss_total,
+        return self.tf_session.run(self.loss_raw,
                                   feed_dict={self.input_placeholder: params,
                                   self.output_placeholder: [[c] for c in costs],
                                   })
@@ -435,13 +439,21 @@ class NeuralNet():
             filenames when saving the neural nets. If set to None, then the
             default value for the SingleNeuralNet class will be used. Default
             None.
+        regularization_coefficient (Optional float): The initial value for the
+            coefficient used to weight the regularization cost when calculating
+            the total loss. If set to `None` then the default value of `1e-8`
+            will be used. Note that the coefficient's value will generally
+            change if `fit_hyperparameters` is set to `True`. Default `None`.
     '''
+    _DEFAULT_NET_REG = 1e-8
 
     def __init__(self,
                  num_params = None,
                  fit_hyperparameters = False,
                  learner_archive_dir = None,
-                 start_datetime = None):
+                 start_datetime = None,
+                 regularization_coefficient=None,
+                 ):
 
         self.log = logging.getLogger(__name__)
         self.log.info('Initialising neural network impl')
@@ -460,7 +472,11 @@ class NeuralNet():
 
         # Variables for tracking the current state of hyperparameter fitting.
         self.last_hyperfit = 0
-        self.last_net_reg = 1e-8
+        if regularization_coefficient is None:
+            self.last_net_reg = self._DEFAULT_NET_REG
+        else:
+            self.last_net_reg = regularization_coefficient
+        self.regularization_history = [self.last_net_reg]
 
         # The samples used to fit the scalers. When set, this will be a tuple of
         # (params samples, cost samples).
@@ -566,13 +582,13 @@ class NeuralNet():
 
         You must only load a net from an archive if that archive corresponds to a net with the same
         constructor parameters.
-        
+
         Args:
-            archive (dict): An archive dictionary containg the data from a
+            archive (dict): An archive dictionary containing the data from a
                 neural net learner archive, typically created using
                 get_dict_from_file() from utilities.py.
             extra_search_dirs (Optional list of str): If the neural net archive
-                is not in at the location sepcified for it in the archive
+                is not in at the location specified for it in the archive
                 dictionary, then the directories in extra_search_dirs will be
                 checked for a file of the saved name. If found, that file will
                 be used. If set to None, no other directories will be checked.
@@ -586,6 +602,15 @@ class NeuralNet():
         self.last_net_reg = float(archive['last_net_reg'])
 
         self.losses_list = list(archive['losses_list'])
+        # M-LOOP versions 3.1.1 and below used one fixed regularization
+        # coefficient value and didn't generate/save its history. For backwards
+        # compatibility, if it's missing from the archive default to a list with
+        # just last_net_reg.
+        regularization_history = archive.get(
+            'regularization_history',
+            [self.last_net_reg],
+        )
+        self.regularization_history = list(regularization_history)
 
         self.scaler_samples = archive['scaler_samples']
         if not self.scaler_samples is None:
@@ -600,6 +625,7 @@ class NeuralNet():
         '''
         return {'last_hyperfit': self.last_hyperfit,
                 'last_net_reg': self.last_net_reg,
+                'regularization_history': self.regularization_history,
                 'losses_list': self.losses_list,
                 'scaler_samples': self.scaler_samples,
                 'net': self.net.save(),
@@ -638,42 +664,76 @@ class NeuralNet():
         all_params, all_costs = self._scale_params_and_cost_list(all_params, all_costs)
 
         if self.fit_hyperparameters:
-            # Every 20 runs, re-fit the hyperparameters.
+            # Re-fit the hyperparameters every runs_per_hyperparameter_fit runs.
+            runs_per_hyperparameter_fit = 100.0
             n_fits = len(all_params)
-            n_hyperfit = int(n_fits / 20.0)  # int() rounds down.
+            n_hyperfit = int(n_fits / runs_per_hyperparameter_fit)  # int() rounds down.
             if n_hyperfit > self.last_hyperfit:
+                self.log.info("Tuning regularization coefficient value.")
                 self.last_hyperfit = n_hyperfit
 
                 # Fit regularisation
 
-                # Split the data into training and cross validation
+                # May as well re-fit the cost and parameter scalers since a new
+                # net will be re-created from scratch. This keeps the scaled
+                # costs and parameters ~1.
+                self.scaler_samples = (all_params.copy(), all_costs.copy())
+                self._fit_scaler()
+
+                # Split the data into training and cross validation randomly
                 training_fraction = 0.9
-                split_index = int(training_fraction * len(all_params))
-                train_params = all_params[:split_index]
-                train_costs = all_costs[:split_index]
-                cv_params = all_params[split_index:]
-                cv_costs = all_costs[split_index:]
+                n_observations = len(all_costs)
+                split_index = int(training_fraction * n_observations)
+                indices = np.random.permutation(n_observations)
+                # Extract the training dataset.
+                train_indices = indices[:split_index]
+                train_params = all_params[train_indices]
+                train_costs = all_costs[train_indices]
+                # Extract the cross validation dataset.
+                cv_indices = indices[split_index:]
+                cv_params = all_params[cv_indices]
+                cv_costs = all_costs[cv_indices]
 
-                orig_cv_loss = self.net.cross_validation_loss(cv_params, cv_costs)
-                best_cv_loss = orig_cv_loss
-
-                self.log.debug("Fitting regularisation, current cv loss=" + str(orig_cv_loss))
-
-                # Try a bunch of different regularisation parameters, switching to a new one if it
-                # does significantly better on the cross validation set than the old one.
-                for r in [0.001, 0.01, 0.1, 1, 10]:
+                # Try a bunch of different regularisation parameters, switching
+                # to a new one if it does better on the cross validation set
+                # than the old one.
+                regularizations = [self._DEFAULT_NET_REG]
+                regularizations.extend(np.logspace(-5, 1, 7))
+                cv_losses = []
+                best_cv_loss = np.inf
+                for r in regularizations:
+                    r = float(r)
+                    self.log.debug(
+                        "Testing regularization value {r}...".format(r=r)
+                    )
                     net = self._make_net(r)
                     net.init()
                     net.fit(train_params, train_costs, self.initial_epochs)
                     this_cv_loss = net.cross_validation_loss(cv_params, cv_costs)
-                    if this_cv_loss < best_cv_loss and this_cv_loss < 0.1 * orig_cv_loss:
+                    cv_losses.append(this_cv_loss)
+                    if this_cv_loss < best_cv_loss:
                         best_cv_loss = this_cv_loss
-                        self.log.debug("Switching to reg=" + str(r) + ", cv loss=" + str(best_cv_loss))
                         self.last_net_reg = r
                         self.net.destroy()
                         self.net = net
                     else:
                         net.destroy()
+
+                # Record results.
+                self.regularization_history.append(self.last_net_reg)
+                self.log.debug(
+                    ("Regularizations tried: {regularizations}, corresponding "
+                     "cross validation losses: {cv_losses}").format(
+                         regularizations=regularizations,
+                         cv_losses=cv_losses,
+                     )
+                )
+                self.log.info(
+                    "Using reg={last_net_reg}, cv loss={best_cv_loss}".format(
+                        last_net_reg=self.last_net_reg,
+                        best_cv_loss=best_cv_loss,
+                    )
+                )
 
         self.net.fit(
                 all_params,
